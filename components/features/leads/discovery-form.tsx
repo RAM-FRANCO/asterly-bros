@@ -106,9 +106,9 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid grid-cols-[auto_auto_auto] items-end gap-3 sm:flex sm:flex-wrap">
         {useCustom ? (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-1.5">
             <label
               htmlFor="custom-area-input"
               className="text-sm font-medium leading-none"
@@ -128,7 +128,7 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
             />
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-1.5">
             <label
               htmlFor="area-select"
               className="text-sm font-medium leading-none"
@@ -160,7 +160,7 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
           </div>
         )}
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-1.5">
           <label
             htmlFor="limit-select"
             className="text-sm font-medium leading-none"
@@ -187,16 +187,21 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
           </Select>
         </div>
 
-        <Button
-          onClick={handleDiscover}
-          disabled={isLoading || !activeArea}
-          aria-busy={isLoading}
-        >
-          {isLoading ? "Discovering…" : "Discover Leads"}
-        </Button>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm leading-none invisible" aria-hidden="true">
+            &nbsp;
+          </span>
+          <Button
+            onClick={handleDiscover}
+            disabled={isLoading || !activeArea}
+            aria-busy={isLoading}
+          >
+            {isLoading ? "Discovering…" : "Discover Leads"}
+          </Button>
+        </div>
 
         {resultCount !== null && (
-          <p className="text-sm text-muted-foreground">
+          <p className="col-span-full self-center text-sm text-muted-foreground sm:self-end">
             {resultCount} new lead{resultCount !== 1 ? "s" : ""} added
           </p>
         )}
