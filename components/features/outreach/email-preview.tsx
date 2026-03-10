@@ -38,6 +38,7 @@ export function EmailPreview({ draft, onSend, onSaveBody }: EmailPreviewProps) {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isPendingReview = draft.status === "pending_review";
+  const isEditable = draft.status === "draft" || draft.status === "pending_review" || draft.status === "approved";
   const bodyWasEdited = editedBody !== draft.fullBody;
 
   const debouncedSave = useCallback(
@@ -150,32 +151,41 @@ export function EmailPreview({ draft, onSend, onSaveBody }: EmailPreviewProps) {
             </div>
           )}
 
-          <fieldset>
-            <legend className="text-sm font-medium mb-2">Subject line</legend>
-            <div className="space-y-2" role="radiogroup" aria-label="Select subject line">
-              {subjectLines.map((line, index) => (
-                <label
-                  key={index}
-                  className={cn(
-                    "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors",
-                    selectedSubjectIndex === index
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:bg-muted/50"
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name={`subject-${draft.id}`}
-                    value={index}
-                    checked={selectedSubjectIndex === index}
-                    onChange={() => setSelectedSubjectIndex(index)}
-                    className="sr-only"
-                  />
-                  <span className="text-sm">{line}</span>
-                </label>
-              ))}
+          {isEditable ? (
+            <fieldset>
+              <legend className="text-sm font-medium mb-2">Subject line</legend>
+              <div className="space-y-2" role="radiogroup" aria-label="Select subject line">
+                {subjectLines.map((line, index) => (
+                  <label
+                    key={index}
+                    className={cn(
+                      "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors",
+                      selectedSubjectIndex === index
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/50"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name={`subject-${draft.id}`}
+                      value={index}
+                      checked={selectedSubjectIndex === index}
+                      onChange={() => setSelectedSubjectIndex(index)}
+                      className="sr-only"
+                    />
+                    <span className="text-sm">{line}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : (
+            <div>
+              <p className="text-sm font-medium mb-1">Subject line</p>
+              <p className="text-sm rounded-lg border bg-muted/30 p-2">
+                {subjectLines[selectedSubjectIndex]}
+              </p>
             </div>
-          </fieldset>
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-1">
