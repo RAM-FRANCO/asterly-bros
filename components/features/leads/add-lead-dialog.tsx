@@ -106,10 +106,8 @@ export function AddLeadDialog({ onLeadAdded }: AddLeadDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          + Add Lead
-        </Button>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>
+        + Add Lead
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
@@ -147,7 +145,7 @@ export function AddLeadDialog({ onLeadAdded }: AddLeadDialogProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="lead-status">Status</Label>
-                <Select value={status} onValueChange={setStatus}>
+                <Select value={status} onValueChange={(v) => setStatus(v ?? "new")}>
                   <SelectTrigger id="lead-status">
                     <SelectValue />
                   </SelectTrigger>

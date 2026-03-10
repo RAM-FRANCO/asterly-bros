@@ -57,10 +57,10 @@ export default function LeadsPage() {
         <div className="flex items-center gap-2">
           <AddLeadDialog onLeadAdded={handleDiscoveryComplete} />
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" disabled={isClearing}>
-                {isClearing ? "Clearing…" : "Clear All Data"}
-              </Button>
+            <AlertDialogTrigger
+              render={<Button variant="destructive" size="sm" disabled={isClearing} />}
+            >
+              {isClearing ? "Clearing…" : "Clear All Data"}
             </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>

@@ -9,6 +9,7 @@ import { PIPELINE_STAGES } from "@/constants/venue-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { PipelineEntry, PipelineStats } from "@/types/pipeline";
+import type { LeadStatus } from "@/types/lead";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<PipelineStats | null>(null);
