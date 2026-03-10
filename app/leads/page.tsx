@@ -21,6 +21,7 @@ import { toast } from "sonner";
 export default function LeadsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isClearing, setIsClearing] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   function handleDiscoveryComplete() {
     setRefreshKey((k) => k + 1);
@@ -28,6 +29,7 @@ export default function LeadsPage() {
 
   async function handleClearData() {
     setIsClearing(true);
+    setClearDialogOpen(false);
     try {
       const res = await fetch("/api/store/clear", { method: "DELETE" });
       if (!res.ok) {
@@ -56,28 +58,28 @@ export default function LeadsPage() {
 
         <div className="flex items-center gap-2">
           <AddLeadDialog onLeadAdded={handleDiscoveryComplete} />
-          <AlertDialog>
+          <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
             <AlertDialogTrigger
               render={<Button variant="destructive" size="sm" disabled={isClearing} />}
             >
               {isClearing ? "Clearing…" : "Clear All Data"}
             </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Clear all data?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete all leads, email drafts, and
-                notifications. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleClearData}>
-                Yes, clear everything
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear all data?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete all leads, email drafts, and
+                  notifications. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button onClick={handleClearData}>
+                  Yes, clear everything
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </header>
 
