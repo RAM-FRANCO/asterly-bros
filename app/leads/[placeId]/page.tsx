@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScoreBadge } from "@/components/features/leads/score-badge";
+import { SendEmailModal } from "@/components/features/outreach/send-email-modal";
 import { PIPELINE_STAGES } from "@/constants/venue-types";
 import { SCORING_WEIGHTS } from "@/constants/scoring-weights";
 import type { Lead } from "@/types/lead";
+import type { EmailDraft } from "@/types/outreach";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 function formatVenueType(type: string): string {
   return type
@@ -42,10 +45,23 @@ export default function LeadDetailPage({
   const [isLoading, setIsLoading] = useState(true);
   const [enrichLoading, setEnrichLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
 
   useEffect(() => {
     params.then((p) => setPlaceId(p.placeId));
   }, [params]);
+
+  const fetchDraft = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/outreach?leadId=${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setEmailDraft(data.draft ?? null);
+    } catch {
+      /* draft fetch is best-effort */
+    }
+  }, []);
 
   useEffect(() => {
     if (!placeId) return;
@@ -57,7 +73,9 @@ export default function LeadDetailPage({
         if (data.lead) setLead(data.lead);
       })
       .finally(() => setIsLoading(false));
-  }, [placeId]);
+
+    fetchDraft(placeId);
+  }, [placeId, fetchDraft]);
 
   async function handleEnrich() {
     if (!placeId) return;
@@ -85,10 +103,55 @@ export default function LeadDetailPage({
         body: JSON.stringify({ leadId: placeId }),
       });
       if (res.ok) {
-        window.location.href = "/outreach";
+        await fetchDraft(placeId);
+        toast.success("Email draft generated");
       }
     } finally {
       setEmailLoading(false);
+    }
+  }
+
+  async function handleSendEmail(
+    emailId: string,
+    subjectIndex: number,
+    editedBody?: string
+  ) {
+    const res = await fetch("/api/outreach/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emailId,
+        selectedSubjectIndex: subjectIndex,
+        ...(editedBody !== undefined && { fullBody: editedBody }),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to send email");
+      throw new Error(data.error);
+    }
+    toast.success(
+      data.pocMode
+        ? `Email redirected to ${data.redirectedTo} (PoC mode)`
+        : `Email sent to ${data.intendedRecipient}`
+    );
+    if (placeId) {
+      await fetchDraft(placeId);
+      const leadRes = await fetch(`/api/leads/${placeId}`);
+      const leadData = await leadRes.json();
+      if (leadData.lead) setLead(leadData.lead);
+    }
+  }
+
+  async function handleSaveBody(emailId: string, body: string) {
+    const res = await fetch(`/api/outreach/${emailId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fullBody: body }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      toast.error(data.error ?? "Failed to save changes");
     }
   }
 
@@ -118,6 +181,20 @@ export default function LeadDetailPage({
   const weightsByKey = Object.fromEntries(
     SCORING_WEIGHTS.map((w) => [w.key, w])
   );
+
+  const POST_EMAIL_STATUSES = new Set([
+    "email_drafted",
+    "email_approved",
+    "emailed",
+    "follow_up_1",
+    "follow_up_2",
+    "replied",
+    "meeting",
+    "won",
+    "lost",
+  ]);
+  const hasBeenEmailed = POST_EMAIL_STATUSES.has(lead.status);
+  const isEnriched = !!lead.enrichment;
 
   return (
     <div className="space-y-6">
@@ -155,22 +232,41 @@ export default function LeadDetailPage({
       </header>
 
       <div className="flex flex-wrap gap-2">
-        <Button
-          onClick={handleEnrich}
-          disabled={enrichLoading}
-          aria-busy={enrichLoading}
-        >
-          {enrichLoading ? "Enriching…" : "Enrich"}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={handleGenerateEmail}
-          disabled={emailLoading || !lead.enrichment}
-          aria-busy={emailLoading}
-        >
-          {emailLoading ? "Generating…" : "Generate Email"}
-        </Button>
+        {!isEnriched && (
+          <Button
+            onClick={handleEnrich}
+            disabled={enrichLoading}
+            aria-busy={enrichLoading}
+          >
+            {enrichLoading ? "Enriching…" : "Enrich"}
+          </Button>
+        )}
+        {!hasBeenEmailed && !emailDraft && (
+          <Button
+            variant="outline"
+            onClick={handleGenerateEmail}
+            disabled={emailLoading || !lead.enrichment}
+            aria-busy={emailLoading}
+          >
+            {emailLoading ? "Generating…" : "Generate Email"}
+          </Button>
+        )}
+        {emailDraft && emailDraft.status !== "sent" && (
+          <Button onClick={() => setEmailModalOpen(true)}>
+            Review & Send Email
+          </Button>
+        )}
       </div>
+
+      {emailDraft && (
+        <SendEmailModal
+          draft={emailDraft}
+          open={emailModalOpen}
+          onOpenChange={setEmailModalOpen}
+          onSend={handleSendEmail}
+          onSaveBody={handleSaveBody}
+        />
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -205,6 +301,19 @@ export default function LeadDetailPage({
                   className="text-primary hover:underline"
                 >
                   {lead.website}
+                </a>
+              </p>
+            )}
+            {lead.googleMapsUrl && (
+              <p>
+                <span className="font-medium">Google Maps:</span>{" "}
+                <a
+                  href={lead.googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  View on Google Maps ↗
                 </a>
               </p>
             )}
