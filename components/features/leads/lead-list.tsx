@@ -202,7 +202,7 @@ export function LeadList({ area, refreshKey }: LeadListProps) {
           <label htmlFor="status-filter" className="text-sm font-medium leading-none">
             Status
           </label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? ALL_VALUE)}>
             <SelectTrigger id="status-filter" className="w-[150px]" aria-label="Filter by status">
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
@@ -222,7 +222,7 @@ export function LeadList({ area, refreshKey }: LeadListProps) {
             <label htmlFor="venue-type-filter" className="text-sm font-medium leading-none">
               Venue type
             </label>
-            <Select value={venueTypeFilter} onValueChange={setVenueTypeFilter}>
+            <Select value={venueTypeFilter} onValueChange={(v) => setVenueTypeFilter(v ?? ALL_VALUE)}>
               <SelectTrigger id="venue-type-filter" className="w-[170px]" aria-label="Filter by venue type">
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
@@ -243,7 +243,7 @@ export function LeadList({ area, refreshKey }: LeadListProps) {
             <label htmlFor="area-filter" className="text-sm font-medium leading-none">
               Area
             </label>
-            <Select value={areaFilter} onValueChange={setAreaFilter}>
+            <Select value={areaFilter} onValueChange={(v) => setAreaFilter(v ?? ALL_VALUE)}>
               <SelectTrigger id="area-filter" className="w-[150px]" aria-label="Filter by area">
                 <SelectValue placeholder="All areas" />
               </SelectTrigger>
