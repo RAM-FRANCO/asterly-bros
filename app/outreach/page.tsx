@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { EmailPreview } from "@/components/features/outreach/email-preview";
+import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { EmailDraft } from "@/types/outreach";
@@ -54,11 +55,15 @@ export default function OutreachPage() {
   }, [fetchDrafts]);
 
   const handleSend = useCallback(
-    async (emailId: string, subjectIndex: number) => {
+    async (emailId: string, subjectIndex: number, editedBody?: string) => {
       const res = await fetch("/api/outreach/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailId, selectedSubjectIndex: subjectIndex }),
+        body: JSON.stringify({
+          emailId,
+          selectedSubjectIndex: subjectIndex,
+          ...(editedBody !== undefined && { fullBody: editedBody }),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -73,6 +78,21 @@ export default function OutreachPage() {
       await fetchDrafts();
     },
     [fetchDrafts]
+  );
+
+  const handleSaveBody = useCallback(
+    async (emailId: string, body: string) => {
+      const res = await fetch(`/api/outreach/${emailId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullBody: body }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error ?? "Failed to save changes");
+      }
+    },
+    []
   );
 
   const groups = groupDraftsByStatus(drafts);
@@ -112,15 +132,16 @@ export default function OutreachPage() {
               <h2 className="text-lg font-medium capitalize mb-4">
                 {status.replace(/_/g, " ")} ({groups[status].length})
               </h2>
-              <div className="space-y-4">
+              <Accordion className="space-y-3">
                 {groups[status].map((draft) => (
                   <EmailPreview
                     key={draft.id}
                     draft={draft}
                     onSend={handleSend}
+                    onSaveBody={handleSaveBody}
                   />
                 ))}
-              </div>
+              </Accordion>
             </div>
           ))}
         </section>
