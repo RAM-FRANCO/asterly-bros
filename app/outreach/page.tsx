@@ -5,8 +5,18 @@ import Link from "next/link";
 import { EmailPreview } from "@/components/features/outreach/email-preview";
 import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import {
+  getAllEmailDrafts,
+  upsertEmailDraft,
+  getLead,
+  upsertLead,
+  addNotification,
+  getSettings,
+  markNotificationsReadByLeadAndType,
+} from "@/lib/local-store";
 import { toast } from "sonner";
 import type { EmailDraft } from "@/types/outreach";
+import type { Notification } from "@/types/pipeline";
 
 const STATUS_ORDER: EmailDraft["status"][] = [
   "pending_review",
@@ -36,18 +46,13 @@ export default function OutreachPage() {
   const [drafts, setDrafts] = useState<EmailDraft[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchDrafts = useCallback(async () => {
+  const fetchDrafts = useCallback(() => {
     setIsLoading(true);
-    try {
-      const res = await fetch("/api/outreach");
-      if (!res.ok) throw new Error("Failed to fetch drafts");
-      const data = await res.json();
-      setDrafts(data.drafts ?? []);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load drafts");
-    } finally {
-      setIsLoading(false);
-    }
+    const data = getAllEmailDrafts().sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    setDrafts(data);
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -56,13 +61,20 @@ export default function OutreachPage() {
 
   const handleSend = useCallback(
     async (emailId: string, subjectIndex: number, editedBody?: string) => {
+      const draft = drafts.find((d) => d.id === emailId);
+      if (!draft) return;
+
+      const settings = getSettings();
+
       const res = await fetch("/api/outreach/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          emailId,
+          draft,
           selectedSubjectIndex: subjectIndex,
           ...(editedBody !== undefined && { fullBody: editedBody }),
+          pocMode: settings.pocMode,
+          pocRedirectEmail: settings.pocRedirectEmail,
         }),
       });
       const data = await res.json();
@@ -70,29 +82,54 @@ export default function OutreachPage() {
         toast.error(data.error ?? "Failed to send email");
         throw new Error(data.error);
       }
+
+      const updatedDraft: EmailDraft = {
+        ...draft,
+        status: "sent",
+        sentAt: data.sentAt,
+        redirectedTo: data.redirectedTo,
+        selectedSubjectIndex: subjectIndex,
+        ...(editedBody !== undefined && { fullBody: editedBody }),
+      };
+      upsertEmailDraft(updatedDraft);
+
+      const lead = getLead(draft.leadId);
+      if (lead) {
+        upsertLead({ ...lead, status: "emailed" });
+      }
+
+      markNotificationsReadByLeadAndType(draft.leadId, "hold_for_review");
+
+      const notification: Notification = {
+        id: `notif-${Date.now()}`,
+        type: "email_sent",
+        title: `Email sent to ${draft.leadName}`,
+        message: data.redirectedTo
+          ? `Redirected to ${data.redirectedTo} (PoC mode)`
+          : `Sent to ${draft.intendedRecipient}`,
+        leadId: draft.leadId,
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
+      addNotification(notification);
+
       toast.success(
         data.pocMode
           ? `Email redirected to ${data.redirectedTo} (PoC mode)`
           : `Email sent to ${data.intendedRecipient}`
       );
-      await fetchDrafts();
+      fetchDrafts();
     },
-    [fetchDrafts]
+    [fetchDrafts, drafts]
   );
 
   const handleSaveBody = useCallback(
-    async (emailId: string, body: string) => {
-      const res = await fetch(`/api/outreach/${emailId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullBody: body }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        toast.error(data.error ?? "Failed to save changes");
-      }
+    (emailId: string, body: string) => {
+      const draft = drafts.find((d) => d.id === emailId);
+      if (!draft) return;
+      upsertEmailDraft({ ...draft, fullBody: body });
     },
-    []
+    [drafts]
   );
 
   const groups = groupDraftsByStatus(drafts);

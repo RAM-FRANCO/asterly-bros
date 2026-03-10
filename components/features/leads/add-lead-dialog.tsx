@@ -21,7 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { findLeadByName, upsertLead } from "@/lib/local-store";
 import { toast } from "sonner";
+import type { Lead } from "@/types/lead";
 
 interface AddLeadDialogProps {
   onLeadAdded?: () => void;
@@ -60,7 +62,7 @@ export function AddLeadDialog({ onLeadAdded }: AddLeadDialogProps) {
     setNotes("");
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -68,31 +70,41 @@ export function AddLeadDialog({ onLeadAdded }: AddLeadDialogProps) {
       return;
     }
 
+    if (name.length > 300) {
+      toast.error("Venue name is too long");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/leads/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          address,
-          area,
-          phone,
-          website,
-          contactEmail,
-          status,
-          notes,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error ?? "Failed to add lead");
+      const existing = findLeadByName(name);
+      if (existing) {
+        toast.error(`A lead named "${existing.name}" already exists`);
         return;
       }
 
+      const placeId = `manual-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
+      const now = new Date().toISOString();
+
+      const lead: Lead = {
+        placeId,
+        name: name.trim(),
+        address: address.trim(),
+        area: area.trim() || "Manual",
+        phone: phone.trim() || undefined,
+        website: website.trim() || undefined,
+        contactEmail: contactEmail.trim() || undefined,
+        notes: notes.trim() || undefined,
+        types: [],
+        status: status as Lead["status"],
+        confidenceLevel: "low",
+        source: "manual",
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      upsertLead(lead);
       toast.success(`${name} added to your leads`);
       resetForm();
       setOpen(false);

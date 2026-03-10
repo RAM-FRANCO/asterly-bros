@@ -3,9 +3,13 @@ import type { EmailDraft } from "@/types/outreach";
 import type { Lead } from "@/types/lead";
 import { DEFAULT_BRAND_VOICE } from "@/constants/brand-voice";
 import { aiGenerateEmail } from "@/lib/ai";
-import { getSettings } from "@/lib/store";
 
 const SMTP_TIMEOUT_MS = 15000;
+
+interface PocConfig {
+  pocMode: boolean;
+  redirectEmail: string;
+}
 
 function createTransporter() {
   return nodemailer.createTransport({
@@ -18,14 +22,6 @@ function createTransporter() {
     greetingTimeout: SMTP_TIMEOUT_MS,
     socketTimeout: SMTP_TIMEOUT_MS,
   });
-}
-
-export function getPocConfig(): { pocMode: boolean; redirectEmail: string } {
-  const settings = getSettings();
-  return {
-    pocMode: settings.pocMode,
-    redirectEmail: settings.pocRedirectEmail,
-  };
 }
 
 export function getRedirectAddress(
@@ -46,9 +42,10 @@ export function getRedirectAddress(
 }
 
 export async function sendOutreachEmail(
-  draft: EmailDraft
+  draft: EmailDraft,
+  pocConfig: PocConfig
 ): Promise<{ success: boolean; redirectedTo?: string; error?: string }> {
-  const { pocMode, redirectEmail } = getPocConfig();
+  const { pocMode, redirectEmail } = pocConfig;
 
   if (!pocMode) {
     return {
@@ -97,10 +94,10 @@ export async function sendOutreachEmail(
 export async function sendNotificationEmail(
   leadName: string,
   holdReasons: string[],
-  leadId: string
+  leadId: string,
+  redirectEmail: string
 ): Promise<{ success: boolean; error?: string }> {
   const transporter = createTransporter();
-  const { redirectEmail } = getPocConfig();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   try {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { DEFAULT_BRAND_VOICE } from "@/constants/brand-voice";
+import { getSettings, updateSettings } from "@/lib/local-store";
 import { toast } from "sonner";
 import type { BrandVoiceConfig } from "@/types/outreach";
 
@@ -27,70 +28,40 @@ export default function SettingsPage() {
     pocRedirectEmail: "",
   });
   const [pocLoading, setPocLoading] = useState(true);
-  const [pocSaving, setPocSaving] = useState(false);
-
-  const fetchPocSettings = useCallback(async () => {
-    try {
-      const res = await fetch("/api/settings");
-      if (res.ok) {
-        const data = await res.json();
-        setPoc({ pocMode: data.pocMode, pocRedirectEmail: data.pocRedirectEmail });
-      }
-    } catch {
-      // fall back to defaults
-    } finally {
-      setPocLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    fetchPocSettings();
-  }, [fetchPocSettings]);
+    const settings = getSettings();
+    setPoc({
+      pocMode: settings.pocMode,
+      pocRedirectEmail: settings.pocRedirectEmail,
+    });
+    setPocLoading(false);
+  }, []);
 
-  const handlePocToggle = async (enabled: boolean) => {
+  const handlePocToggle = (enabled: boolean) => {
     if (enabled && !poc.pocRedirectEmail.trim()) {
       toast.error("Set a redirect email before enabling PoC mode");
       return;
     }
 
-    setPocSaving(true);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pocMode: enabled }),
-      });
-      if (!res.ok) throw new Error();
-      setPoc((prev) => ({ ...prev, pocMode: enabled }));
-      toast.success(enabled ? "PoC mode enabled — emails will be redirected" : "PoC mode disabled — emails go to real venues");
-    } catch {
-      toast.error("Failed to update PoC mode");
-    } finally {
-      setPocSaving(false);
-    }
+    updateSettings({ pocMode: enabled });
+    setPoc((prev) => ({ ...prev, pocMode: enabled }));
+    toast.success(
+      enabled
+        ? "PoC mode enabled — emails will be redirected"
+        : "PoC mode disabled — emails go to real venues"
+    );
   };
 
-  const handlePocEmailSave = async () => {
+  const handlePocEmailSave = () => {
     const email = poc.pocRedirectEmail.trim();
     if (!email || !email.includes("@")) {
       toast.error("Enter a valid email address");
       return;
     }
 
-    setPocSaving(true);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pocRedirectEmail: email }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("Redirect email updated");
-    } catch {
-      toast.error("Failed to save redirect email");
-    } finally {
-      setPocSaving(false);
-    }
+    updateSettings({ pocRedirectEmail: email });
+    toast.success("Redirect email updated");
   };
 
   const handleSave = () => {
@@ -139,7 +110,6 @@ export default function SettingsPage() {
                   id="poc-toggle"
                   checked={poc.pocMode}
                   onCheckedChange={handlePocToggle}
-                  disabled={pocSaving}
                   aria-label="Toggle PoC mode"
                 />
                 <Label htmlFor="poc-toggle" className="cursor-pointer">
@@ -158,13 +128,11 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       setPoc((prev) => ({ ...prev, pocRedirectEmail: e.target.value }))
                     }
-                    disabled={pocSaving}
                     className="max-w-sm"
                   />
                   <Button
                     variant="outline"
                     onClick={handlePocEmailSave}
-                    disabled={pocSaving}
                   >
                     Save
                   </Button>

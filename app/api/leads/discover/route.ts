@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { searchVenues } from "@/lib/google-places";
-import { upsertLead, getLead, findLeadByName } from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
@@ -22,21 +21,7 @@ export async function POST(request: Request) {
 
     const venues = await searchVenues(area, venueType ?? "bar", limit ?? 3, isLondon ?? true);
 
-    let newCount = 0;
-    for (const venue of venues) {
-      const existingById = getLead(venue.placeId);
-      const existingByName = findLeadByName(venue.name);
-      if (!existingById && !existingByName) {
-        upsertLead(venue);
-        newCount++;
-      }
-    }
-
-    return NextResponse.json({
-      totalFound: venues.length,
-      newLeads: newCount,
-      area,
-    });
+    return NextResponse.json({ venues, area });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Discovery failed";
     return NextResponse.json({ error: message }, { status: 500 });

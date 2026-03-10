@@ -6,35 +6,47 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PIPELINE_STAGES } from "@/constants/venue-types";
+import { getAllLeads, getStats } from "@/lib/local-store";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import type { PipelineEntry, PipelineStats } from "@/types/pipeline";
+import type { PipelineStats } from "@/types/pipeline";
 import type { LeadStatus } from "@/types/lead";
+
+interface RecentLead {
+  leadId: string;
+  leadName: string;
+  area: string;
+  score: number;
+  status: LeadStatus;
+  updatedAt: string;
+}
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<PipelineStats | null>(null);
-  const [recentLeads, setRecentLeads] = useState<PipelineEntry[]>([]);
+  const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(() => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/pipeline");
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-      setStats(data.stats ?? null);
-      const pipeline = data.pipeline ?? [];
-      setRecentLeads(
-        pipeline
-          .sort(
-            (a: PipelineEntry, b: PipelineEntry) =>
-              new Date(b.updatedAt).getTime() -
-              new Date(a.updatedAt).getTime()
-          )
-          .slice(0, 5)
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load dashboard");
+      const computedStats = getStats();
+      setStats(computedStats);
+
+      const leads = getAllLeads()
+        .filter((l) => l.status !== "new")
+        .sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )
+        .slice(0, 5)
+        .map((l) => ({
+          leadId: l.placeId,
+          leadName: l.name,
+          area: l.area,
+          score: l.score ?? 0,
+          status: l.status,
+          updatedAt: l.updatedAt,
+        }));
+      setRecentLeads(leads);
     } finally {
       setIsLoading(false);
     }

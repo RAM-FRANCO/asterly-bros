@@ -3,18 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { buildLogs, type LogEntry } from "@/lib/local-store";
 import { cn } from "@/lib/utils";
-
-interface LogEntry {
-  id: string;
-  timestamp: string;
-  leadName: string;
-  leadId: string;
-  action: string;
-  detail: string;
-  tier?: string;
-  score?: number;
-}
 
 const ACTION_CONFIG: Record<
   string,
@@ -95,10 +85,8 @@ export default function LogsPage() {
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    fetch("/api/logs")
-      .then((res) => res.json())
-      .then((data) => setLogs(data.logs ?? []))
-      .finally(() => setIsLoading(false));
+    setLogs(buildLogs());
+    setIsLoading(false);
   }, []);
 
   const filtered =

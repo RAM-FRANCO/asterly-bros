@@ -19,32 +19,47 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PIPELINE_STAGES } from "@/constants/venue-types";
+import { getAllLeads, getLead, upsertLead, getStats } from "@/lib/local-store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { LeadStatus } from "@/types/lead";
-import type { PipelineEntry, PipelineStats } from "@/types/pipeline";
+import type { PipelineStats } from "@/types/pipeline";
+
+interface PipelineRow {
+  leadId: string;
+  leadName: string;
+  area: string;
+  score: number;
+  status: LeadStatus;
+  confidenceLevel: string;
+  updatedAt: string;
+}
 
 export default function PipelinePage() {
-  const [pipeline, setPipeline] = useState<PipelineEntry[]>([]);
+  const [pipeline, setPipeline] = useState<PipelineRow[]>([]);
   const [stats, setStats] = useState<PipelineStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchPipeline = useCallback(async () => {
+  const fetchPipeline = useCallback(() => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/pipeline");
-      if (!res.ok) throw new Error("Failed to fetch pipeline");
-      const data = await res.json();
-      setPipeline(
-        (data.pipeline ?? []).sort(
-          (a: PipelineEntry, b: PipelineEntry) => b.score - a.score
-        )
-      );
-      setStats(data.stats ?? null);
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to load pipeline"
-      );
+      const leads = getAllLeads();
+      const computedStats = getStats();
+      setStats(computedStats);
+
+      const entries = leads
+        .filter((l) => l.status !== "new")
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        .map((l) => ({
+          leadId: l.placeId,
+          leadName: l.name,
+          area: l.area,
+          score: l.score ?? 0,
+          status: l.status,
+          confidenceLevel: l.confidenceLevel,
+          updatedAt: l.updatedAt,
+        }));
+      setPipeline(entries);
     } finally {
       setIsLoading(false);
     }
@@ -55,22 +70,16 @@ export default function PipelinePage() {
   }, [fetchPipeline]);
 
   const handleStatusChange = useCallback(
-    async (leadId: string, status: LeadStatus) => {
-      try {
-        const res = await fetch("/api/pipeline", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leadId, status }),
-        });
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error ?? "Failed to update");
-        }
-        toast.success("Status updated");
-        await fetchPipeline();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Update failed");
+    (leadId: string, status: LeadStatus) => {
+      const lead = getLead(leadId);
+      if (!lead) {
+        toast.error("Lead not found");
+        return;
       }
+
+      upsertLead({ ...lead, status });
+      toast.success("Status updated");
+      fetchPipeline();
     },
     [fetchPipeline]
   );

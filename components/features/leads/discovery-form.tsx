@@ -11,7 +11,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LONDON_AREAS } from "@/constants/venue-types";
+import { getLead, findLeadByName, upsertLead } from "@/lib/local-store";
 import { toast } from "sonner";
+import type { Lead } from "@/types/lead";
 
 const AREA_PRESETS = [
   { label: "Popular London Areas", items: LONDON_AREAS },
@@ -58,14 +60,21 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
         return;
       }
 
-      const { totalFound, newLeads } = data as {
-        totalFound: number;
-        newLeads: number;
-        area: string;
-      };
-      setResultCount(newLeads);
+      const venues = (data.venues ?? []) as Lead[];
+      let newCount = 0;
+
+      for (const venue of venues) {
+        const existingById = getLead(venue.placeId);
+        const existingByName = findLeadByName(venue.name);
+        if (!existingById && !existingByName) {
+          upsertLead(venue);
+          newCount++;
+        }
+      }
+
+      setResultCount(newCount);
       toast.success(
-        `Found ${totalFound} venues in ${activeArea}. ${newLeads} new leads added.`
+        `Found ${venues.length} venues in ${activeArea}. ${newCount} new leads added.`
       );
       onDiscoveryComplete?.();
     } catch {

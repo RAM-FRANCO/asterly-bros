@@ -1,24 +1,16 @@
 import { NextResponse } from "next/server";
 import { enrichVenue } from "@/lib/enrichment";
 import { scoreLead } from "@/lib/scoring";
-import { getLead, upsertLead } from "@/lib/store";
+import type { Lead } from "@/types/lead";
 
 export async function POST(request: Request) {
   try {
-    const { placeId } = await request.json();
+    const { lead } = (await request.json()) as { lead: Lead };
 
-    if (!placeId) {
+    if (!lead?.placeId) {
       return NextResponse.json(
-        { error: "placeId is required" },
+        { error: "Lead data is required" },
         { status: 400 }
-      );
-    }
-
-    const lead = getLead(placeId);
-    if (!lead) {
-      return NextResponse.json(
-        { error: "Lead not found" },
-        { status: 404 }
       );
     }
 
@@ -30,19 +22,20 @@ export async function POST(request: Request) {
       lead.reviewCount
     );
 
-    lead.enrichment = enrichment;
-    lead.status = "enriched";
+    const enrichedLead: Lead = {
+      ...lead,
+      enrichment,
+      status: "enriched",
+    };
 
-    const { score, breakdown, confidenceLevel } = scoreLead(lead);
-    lead.score = score;
-    lead.scoreBreakdown = breakdown;
-    lead.confidenceLevel = confidenceLevel;
-    lead.status = "scored";
-
-    upsertLead(lead);
+    const { score, breakdown, confidenceLevel } = scoreLead(enrichedLead);
+    enrichedLead.score = score;
+    enrichedLead.scoreBreakdown = breakdown;
+    enrichedLead.confidenceLevel = confidenceLevel;
+    enrichedLead.status = "scored";
 
     return NextResponse.json({
-      lead,
+      lead: enrichedLead,
       enrichment,
       score,
       scoreBreakdown: breakdown,

@@ -9,8 +9,17 @@ import { ScoreBadge } from "@/components/features/leads/score-badge";
 import { SendEmailModal } from "@/components/features/outreach/send-email-modal";
 import { PIPELINE_STAGES } from "@/constants/venue-types";
 import { SCORING_WEIGHTS } from "@/constants/scoring-weights";
+import {
+  getLead,
+  upsertLead,
+  getEmailDraftByLead,
+  upsertEmailDraft,
+  addNotification,
+  getSettings,
+} from "@/lib/local-store";
 import type { Lead } from "@/types/lead";
 import type { EmailDraft } from "@/types/outreach";
+import type { Notification } from "@/types/pipeline";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -52,59 +61,74 @@ export default function LeadDetailPage({
     params.then((p) => setPlaceId(p.placeId));
   }, [params]);
 
-  const fetchDraft = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/outreach?leadId=${id}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setEmailDraft(data.draft ?? null);
-    } catch {
-      /* draft fetch is best-effort */
-    }
+  const loadData = useCallback((id: string) => {
+    const storedLead = getLead(id);
+    if (storedLead) setLead(storedLead);
+    const draft = getEmailDraftByLead(id);
+    setEmailDraft(draft ?? null);
   }, []);
 
   useEffect(() => {
     if (!placeId) return;
-
     setIsLoading(true);
-    fetch(`/api/leads/${placeId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.lead) setLead(data.lead);
-      })
-      .finally(() => setIsLoading(false));
-
-    fetchDraft(placeId);
-  }, [placeId, fetchDraft]);
+    loadData(placeId);
+    setIsLoading(false);
+  }, [placeId, loadData]);
 
   async function handleEnrich() {
-    if (!placeId) return;
+    if (!placeId || !lead) return;
     setEnrichLoading(true);
     try {
       const res = await fetch("/api/leads/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ placeId }),
+        body: JSON.stringify({ lead }),
       });
       const data = await res.json();
-      if (res.ok && data.lead) setLead(data.lead);
+      if (res.ok && data.lead) {
+        upsertLead(data.lead);
+        setLead(data.lead);
+      }
     } finally {
       setEnrichLoading(false);
     }
   }
 
   async function handleGenerateEmail() {
-    if (!placeId) return;
+    if (!placeId || !lead) return;
     setEmailLoading(true);
     try {
+      const existingDraft = getEmailDraftByLead(placeId);
+      const settings = getSettings();
+
       const res = await fetch("/api/outreach/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId: placeId }),
+        body: JSON.stringify({
+          lead,
+          existingDraftStatus: existingDraft?.status ?? null,
+          pocMode: settings.pocMode,
+          pocRedirectEmail: settings.pocRedirectEmail,
+        }),
       });
+
+      const data = await res.json();
+
       if (res.ok) {
-        await fetchDraft(placeId);
+        upsertEmailDraft(data.draft);
+        setEmailDraft(data.draft);
+
+        const updatedLead = { ...lead, status: data.leadStatus };
+        upsertLead(updatedLead);
+        setLead(updatedLead);
+
+        if (data.notification) {
+          addNotification(data.notification as Notification);
+        }
+
         toast.success("Email draft generated");
+      } else {
+        toast.error(data.error ?? "Failed to generate email");
       }
     } finally {
       setEmailLoading(false);
@@ -116,13 +140,20 @@ export default function LeadDetailPage({
     subjectIndex: number,
     editedBody?: string
   ) {
+    const draft = emailDraft;
+    if (!draft) return;
+
+    const settings = getSettings();
+
     const res = await fetch("/api/outreach/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        emailId,
+        draft,
         selectedSubjectIndex: subjectIndex,
         ...(editedBody !== undefined && { fullBody: editedBody }),
+        pocMode: settings.pocMode,
+        pocRedirectEmail: settings.pocRedirectEmail,
       }),
     });
     const data = await res.json();
@@ -130,29 +161,49 @@ export default function LeadDetailPage({
       toast.error(data.error ?? "Failed to send email");
       throw new Error(data.error);
     }
+
+    const updatedDraft: EmailDraft = {
+      ...draft,
+      status: "sent",
+      sentAt: data.sentAt,
+      redirectedTo: data.redirectedTo,
+      selectedSubjectIndex: subjectIndex,
+      ...(editedBody !== undefined && { fullBody: editedBody }),
+    };
+    upsertEmailDraft(updatedDraft);
+    setEmailDraft(updatedDraft);
+
+    if (lead) {
+      const updatedLead = { ...lead, status: "emailed" as const };
+      upsertLead(updatedLead);
+      setLead(updatedLead);
+    }
+
+    const notification: Notification = {
+      id: `notif-${Date.now()}`,
+      type: "email_sent",
+      title: `Email sent to ${draft.leadName}`,
+      message: data.redirectedTo
+        ? `Redirected to ${data.redirectedTo} (PoC mode)`
+        : `Sent to ${draft.intendedRecipient}`,
+      leadId: draft.leadId,
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
+    addNotification(notification);
+
     toast.success(
       data.pocMode
         ? `Email redirected to ${data.redirectedTo} (PoC mode)`
         : `Email sent to ${data.intendedRecipient}`
     );
-    if (placeId) {
-      await fetchDraft(placeId);
-      const leadRes = await fetch(`/api/leads/${placeId}`);
-      const leadData = await leadRes.json();
-      if (leadData.lead) setLead(leadData.lead);
-    }
   }
 
-  async function handleSaveBody(emailId: string, body: string) {
-    const res = await fetch(`/api/outreach/${emailId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fullBody: body }),
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error ?? "Failed to save changes");
-    }
+  function handleSaveBody(emailId: string, body: string) {
+    if (!emailDraft) return;
+    const updated = { ...emailDraft, fullBody: body };
+    upsertEmailDraft(updated);
+    setEmailDraft(updated);
   }
 
   if (isLoading || !placeId) {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { usePathname } from "next/navigation";
+import { getPendingReviewCount } from "@/lib/local-store";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -23,17 +24,11 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    async function fetchNotifications() {
-      try {
-        const res = await fetch("/api/notifications");
-        const data = await res.json();
-        setPendingReviewCount(data.pendingReviewCount ?? 0);
-      } catch {
-        // silently fail
-      }
+    function refresh() {
+      setPendingReviewCount(getPendingReviewCount());
     }
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 15000);
+    refresh();
+    const interval = setInterval(refresh, 5000);
     return () => clearInterval(interval);
   }, []);
 

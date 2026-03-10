@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getLead, upsertLead, upsertEmailDraft, addNotification, getEmailDraftByLead, getSettings } from "@/lib/store";
 import { generateEmailDraft, sendNotificationEmail } from "@/lib/email";
 import { getOutreachTier, getOutreachTierLabel } from "@/constants/scoring-weights";
 import type { OutreachTier } from "@/constants/scoring-weights";
@@ -9,18 +8,19 @@ import type { Notification } from "@/types/pipeline";
 
 export async function POST(request: Request) {
   try {
-    const { leadId } = await request.json();
+    const { lead, existingDraftStatus, pocMode, pocRedirectEmail } =
+      (await request.json()) as {
+        lead: Lead;
+        existingDraftStatus: string | null;
+        pocMode: boolean;
+        pocRedirectEmail: string;
+      };
 
-    if (!leadId) {
+    if (!lead) {
       return NextResponse.json(
-        { error: "leadId is required" },
+        { error: "Lead data is required" },
         { status: 400 }
       );
-    }
-
-    const lead = getLead(leadId);
-    if (!lead) {
-      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
     if (!lead.enrichment) {
@@ -30,12 +30,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const existingDraft = getEmailDraftByLead(leadId);
-    if (existingDraft && existingDraft.status !== "failed") {
+    if (existingDraftStatus && existingDraftStatus !== "failed") {
       return NextResponse.json(
         {
-          error: `Email already exists for ${lead.name} (status: ${existingDraft.status})`,
-          existingDraft,
+          error: `Email already exists for ${lead.name} (status: ${existingDraftStatus})`,
         },
         { status: 409 }
       );
@@ -62,16 +60,16 @@ export async function POST(request: Request) {
     const needsReview = tier !== "high" || holdReasons.length > 0;
 
     const intendedRecipient =
-      lead.enrichment.contactEmail ?? `info@${lead.name.toLowerCase().replace(/\s+/g, "")}.com`;
+      lead.enrichment.contactEmail ??
+      `info@${lead.name.toLowerCase().replace(/\s+/g, "")}.com`;
 
-    const { pocMode } = getSettings();
     const pocFooter = pocMode
       ? `\n\n---\n[PoC Mode] Originally intended for: ${intendedRecipient}`
       : "";
 
     const draft: EmailDraft = {
-      id: `email-${leadId}-${Date.now()}`,
-      leadId,
+      id: `email-${lead.placeId}-${Date.now()}`,
+      leadId: lead.placeId,
       leadName: lead.name,
       intendedRecipient,
       subjectLines,
@@ -88,30 +86,31 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     };
 
-    upsertEmailDraft(draft);
-
-    lead.status = needsReview ? "email_drafted" : "email_approved";
-    upsertLead(lead);
+    let notification: Notification | null = null;
 
     if (needsReview) {
-      const notification: Notification = {
+      notification = {
         id: `notif-${Date.now()}`,
         type: "hold_for_review",
         title: `Review needed: ${lead.name}`,
         message: `Email draft held: ${holdReasons.join(", ")}`,
-        leadId,
+        leadId: lead.placeId,
         read: false,
         createdAt: new Date().toISOString(),
       };
-      addNotification(notification);
 
-      sendNotificationEmail(lead.name, holdReasons, leadId).catch(() => {
-        // notification email is best-effort
-      });
+      sendNotificationEmail(
+        lead.name,
+        holdReasons,
+        lead.placeId,
+        pocRedirectEmail
+      ).catch(() => {});
     }
 
     return NextResponse.json({
       draft,
+      notification,
+      leadStatus: needsReview ? "email_drafted" : "email_approved",
       autoApproved: !needsReview,
       holdReasons,
       tier,
@@ -139,7 +138,9 @@ function getHoldReasons(lead: Lead, tier: OutreachTier): string[] {
   }
 
   if (enrichment?.source !== "website") {
-    reasons.push(`Enrichment from ${enrichment?.source ?? "unknown"} (not website) — data may be incomplete`);
+    reasons.push(
+      `Enrichment from ${enrichment?.source ?? "unknown"} (not website) — data may be incomplete`
+    );
   }
 
   const unusualTypes = ["hotel_bar", "event_space", "pub", "cafe", "other"];

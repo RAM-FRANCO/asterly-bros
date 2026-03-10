@@ -1,24 +1,22 @@
 import { NextResponse } from "next/server";
-import { getEmailDraft, upsertEmailDraft, getLead, upsertLead, addNotification, markNotificationsReadByLeadAndType } from "@/lib/store";
 import { sendOutreachEmail } from "@/lib/email";
-import type { Notification } from "@/types/pipeline";
+import type { EmailDraft } from "@/types/outreach";
 
 export async function POST(request: Request) {
   try {
-    const { emailId, selectedSubjectIndex, fullBody } = await request.json();
+    const { draft, selectedSubjectIndex, fullBody, pocMode, pocRedirectEmail } =
+      (await request.json()) as {
+        draft: EmailDraft;
+        selectedSubjectIndex?: number;
+        fullBody?: string;
+        pocMode: boolean;
+        pocRedirectEmail: string;
+      };
 
-    if (!emailId) {
-      return NextResponse.json(
-        { error: "emailId is required" },
-        { status: 400 }
-      );
-    }
-
-    const draft = getEmailDraft(emailId);
     if (!draft) {
       return NextResponse.json(
-        { error: "Email draft not found" },
-        { status: 404 }
+        { error: "Draft data is required" },
+        { status: 400 }
       );
     }
 
@@ -29,53 +27,30 @@ export async function POST(request: Request) {
       );
     }
 
+    const draftToSend = { ...draft };
+
     if (selectedSubjectIndex !== undefined) {
-      draft.selectedSubjectIndex = selectedSubjectIndex;
+      draftToSend.selectedSubjectIndex = selectedSubjectIndex;
     }
 
     if (typeof fullBody === "string" && fullBody.trim().length > 0) {
-      draft.fullBody = fullBody;
+      draftToSend.fullBody = fullBody;
     }
 
-    const result = await sendOutreachEmail(draft);
+    const result = await sendOutreachEmail(draftToSend, {
+      pocMode,
+      redirectEmail: pocRedirectEmail,
+    });
 
     if (result.success) {
-      draft.status = "sent";
-      draft.sentAt = new Date().toISOString();
-      draft.redirectedTo = result.redirectedTo;
-      upsertEmailDraft(draft);
-
-      const lead = getLead(draft.leadId);
-      if (lead) {
-        lead.status = "emailed";
-        upsertLead(lead);
-      }
-
-      markNotificationsReadByLeadAndType(draft.leadId, "hold_for_review");
-
-      const notification: Notification = {
-        id: `notif-${Date.now()}`,
-        type: "email_sent",
-        title: `Email sent to ${draft.leadName}`,
-        message: result.redirectedTo
-          ? `Redirected to ${result.redirectedTo} (PoC mode)`
-          : `Sent to ${draft.intendedRecipient}`,
-        leadId: draft.leadId,
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-      addNotification(notification);
-
       return NextResponse.json({
         success: true,
         redirectedTo: result.redirectedTo,
-        intendedRecipient: draft.intendedRecipient,
+        intendedRecipient: draftToSend.intendedRecipient,
         pocMode: !!result.redirectedTo,
+        sentAt: new Date().toISOString(),
       });
     }
-
-    draft.status = "failed";
-    upsertEmailDraft(draft);
 
     return NextResponse.json(
       { success: false, error: result.error },

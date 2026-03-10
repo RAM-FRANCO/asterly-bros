@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PIPELINE_STAGES } from "@/constants/venue-types";
+import { getAllLeads, getLeadsByArea } from "@/lib/local-store";
 import type { Lead, LeadStatus } from "@/types/lead";
 
 const ALL_VALUE = "__all__";
@@ -48,31 +49,18 @@ function formatVenueType(type: string): string {
 export function LeadList({ area, refreshKey }: LeadListProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState(ALL_VALUE);
   const [venueTypeFilter, setVenueTypeFilter] = useState(ALL_VALUE);
   const [areaFilter, setAreaFilter] = useState(ALL_VALUE);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const fetchLeads = useCallback(async () => {
+  const fetchLeads = useCallback(() => {
     setIsLoading(true);
-    setError(null);
     try {
-      const url = area
-        ? `/api/leads?area=${encodeURIComponent(area)}`
-        : "/api/leads";
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? "Failed to fetch leads");
-        return;
-      }
-
-      setLeads(data.leads ?? []);
-    } catch {
-      setError("Failed to fetch leads");
+      const data = area ? getLeadsByArea(area) : getAllLeads();
+      const sorted = data.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      setLeads(sorted);
     } finally {
       setIsLoading(false);
     }
@@ -155,16 +143,6 @@ export function LeadList({ area, refreshKey }: LeadListProps) {
         {Array.from({ length: 6 }).map((_, i) => (
           <LeadCardSkeleton key={i} />
         ))}
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section aria-label="Lead list">
-        <p className="text-destructive" role="alert">
-          {error}
-        </p>
       </section>
     );
   }

@@ -7,7 +7,6 @@ import { AddLeadDialog } from "@/components/features/leads/add-lead-dialog";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -16,34 +15,22 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { clearAllData } from "@/lib/local-store";
 import { toast } from "sonner";
 
 export default function LeadsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
-  const [isClearing, setIsClearing] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   function handleDiscoveryComplete() {
     setRefreshKey((k) => k + 1);
   }
 
-  async function handleClearData() {
-    setIsClearing(true);
+  function handleClearData() {
     setClearDialogOpen(false);
-    try {
-      const res = await fetch("/api/store/clear", { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json();
-        toast.error(data.error ?? "Failed to clear data");
-        return;
-      }
-      toast.success("All data cleared successfully");
-      setRefreshKey((k) => k + 1);
-    } catch {
-      toast.error("Failed to clear data");
-    } finally {
-      setIsClearing(false);
-    }
+    clearAllData();
+    toast.success("All data cleared successfully");
+    setRefreshKey((k) => k + 1);
   }
 
   return (
@@ -60,9 +47,9 @@ export default function LeadsPage() {
           <AddLeadDialog onLeadAdded={handleDiscoveryComplete} />
           <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
             <AlertDialogTrigger
-              render={<Button variant="destructive" size="sm" disabled={isClearing} />}
+              render={<Button variant="destructive" size="sm" />}
             >
-              {isClearing ? "Clearing…" : "Clear All Data"}
+              Clear All Data
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
