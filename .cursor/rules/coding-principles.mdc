@@ -1,0 +1,58 @@
+---
+description: Core coding principles, React/Next.js patterns, design standards, and feature-based folder structure for the Asterley Bros project.
+alwaysApply: true
+---
+
+# Coding Principles
+
+## Core Principles
+
+- **Micro-Files**: Limit files to ~300 lines. Refactor into smaller modules if exceeded.
+- **Guard Clauses**: Return early instead of nesting if/else structures.
+- **DRY**: Extract reusable logic into `lib/` or shared utilities. Never duplicate logic across files.
+- **No Magic Strings**: Use constants in `constants/` for repeated values (venue types, scoring weights, status labels, etc.).
+- **Strict Typing**: Never use `any`. Define interfaces/types in `types/` for all data structures, API responses, and component props.
+
+## State & Rendering (React/Next.js)
+
+- **Server Components First**: Default to Server Components. Only add `"use client"` when the component needs hooks, event handlers, or browser APIs.
+- **Data Fetching**: Fetch data server-side in page/layout components; pass results as props to client components.
+
+## Design & Performance
+
+- **Interaction Feedback**: Every user action (click, submit, toggle) must provide visual feedback within 400ms — use loading spinners, optimistic updates, or disabled states.
+- **Semantic HTML**: Use `<main>`, `<section>`, `<nav>`, `<article>`, `<button>` over generic `<div>` elements.
+- **Accessibility**: Include proper ARIA labels, roles, and keyboard navigation on all interactive elements.
+
+## Feature-Based Folder Structure
+
+```
+src/
+├── app/
+│   ├── page.tsx                        # Dashboard
+│   ├── leads/
+│   │   ├── page.tsx                    # Discovery & lead list
+│   │   └── [placeId]/page.tsx          # Lead detail + enrichment
+│   ├── outreach/page.tsx               # Email drafts queue
+│   ├── pipeline/page.tsx               # Pipeline tracker
+│   ├── settings/page.tsx               # Brand voice config
+│   └── api/
+│       ├── leads/
+│       ├── outreach/
+│       └── pipeline/
+├── components/
+│   ├── ui/                             # shadcn/ui primitives
+│   └── features/
+│       ├── leads/                      # lead-card, lead-list, discovery-form, score-badge
+│       ├── outreach/                   # email-preview, email-editor, subject-line-picker
+│       ├── pipeline/                   # pipeline-table, status-column, follow-up-reminder
+│       └── settings/                   # brand-voice-editor
+├── lib/                                # API clients, services, utilities
+├── constants/                          # Typed constants (no magic strings)
+├── types/                              # Shared TypeScript interfaces
+└── hooks/                              # Shared custom hooks
+```
+
+- Group components, hooks, and logic **by feature**, not by type.
+- **No barrel files** (`index.ts` re-exports). Always use direct imports.
+- Keep feature folders self-contained: a feature's components, hooks, and helpers live together.
