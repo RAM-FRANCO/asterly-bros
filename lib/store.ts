@@ -6,14 +6,30 @@ import type { Notification } from "@/types/pipeline";
 
 const STORE_PATH = path.join(process.cwd(), "data", "store.json");
 
+export interface AppSettings {
+  pocMode: boolean;
+  pocRedirectEmail: string;
+}
+
+interface InMemoryStore {
+  leads: Map<string, Lead>;
+  emailDrafts: Map<string, EmailDraft>;
+  notifications: Notification[];
+  settings: AppSettings;
+}
+
 interface StoreData {
   leads: Record<string, Lead>;
   emailDrafts: Record<string, EmailDraft>;
   notifications: Notification[];
+  settings: AppSettings;
 }
 
-function emptyStore(): StoreData {
-  return { leads: {}, emailDrafts: {}, notifications: [] };
+function defaultSettings(): AppSettings {
+  return {
+    pocMode: process.env.POC_MODE === "true",
+    pocRedirectEmail: process.env.POC_REDIRECT_EMAIL ?? "",
+  };
 }
 
 function loadFromDisk(): StoreData {
@@ -25,7 +41,22 @@ function loadFromDisk(): StoreData {
   } catch {
     console.warn("Failed to load store from disk, starting fresh");
   }
-  return emptyStore();
+  return { leads: {}, emailDrafts: {}, notifications: [], settings: defaultSettings() };
+}
+
+const globalRef = globalThis as unknown as { __asterleyStore?: InMemoryStore };
+
+function getStore(): InMemoryStore {
+  if (!globalRef.__asterleyStore) {
+    const stored = loadFromDisk();
+    globalRef.__asterleyStore = {
+      leads: new Map(Object.entries(stored.leads)),
+      emailDrafts: new Map(Object.entries(stored.emailDrafts)),
+      notifications: [...stored.notifications],
+      settings: stored.settings ?? defaultSettings(),
+    };
+  }
+  return globalRef.__asterleyStore;
 }
 
 function saveToDisk(): void {
@@ -34,10 +65,12 @@ function saveToDisk(): void {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    const store = getStore();
     const data: StoreData = {
-      leads: Object.fromEntries(leads),
-      emailDrafts: Object.fromEntries(emailDrafts),
-      notifications,
+      leads: Object.fromEntries(store.leads),
+      emailDrafts: Object.fromEntries(store.emailDrafts),
+      notifications: store.notifications,
+      settings: store.settings,
     };
     fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2), "utf-8");
   } catch (err) {
@@ -45,41 +78,34 @@ function saveToDisk(): void {
   }
 }
 
-const stored = loadFromDisk();
-const leads: Map<string, Lead> = new Map(Object.entries(stored.leads));
-const emailDrafts: Map<string, EmailDraft> = new Map(
-  Object.entries(stored.emailDrafts)
-);
-const notifications: Notification[] = [...stored.notifications];
-
 // --- Leads ---
 
 export function getAllLeads(): Lead[] {
-  return Array.from(leads.values());
+  return Array.from(getStore().leads.values());
 }
 
 export function getLead(placeId: string): Lead | undefined {
-  return leads.get(placeId);
+  return getStore().leads.get(placeId);
 }
 
 export function upsertLead(lead: Lead): void {
-  leads.set(lead.placeId, { ...lead, updatedAt: new Date().toISOString() });
+  getStore().leads.set(lead.placeId, { ...lead, updatedAt: new Date().toISOString() });
   saveToDisk();
 }
 
 export function getLeadsByStatus(status: Lead["status"]): Lead[] {
-  return Array.from(leads.values()).filter((l) => l.status === status);
+  return Array.from(getStore().leads.values()).filter((l) => l.status === status);
 }
 
 export function getLeadsByArea(area: string): Lead[] {
-  return Array.from(leads.values()).filter(
+  return Array.from(getStore().leads.values()).filter(
     (l) => l.area.toLowerCase() === area.toLowerCase()
   );
 }
 
 export function findLeadByName(name: string): Lead | undefined {
   const normalized = name.toLowerCase().trim();
-  return Array.from(leads.values()).find(
+  return Array.from(getStore().leads.values()).find(
     (l) => l.name.toLowerCase().trim() === normalized
   );
 }
@@ -87,68 +113,99 @@ export function findLeadByName(name: string): Lead | undefined {
 // --- Email Drafts ---
 
 export function getAllEmailDrafts(): EmailDraft[] {
-  return Array.from(emailDrafts.values());
+  return Array.from(getStore().emailDrafts.values());
 }
 
 export function getEmailDraft(id: string): EmailDraft | undefined {
-  return emailDrafts.get(id);
+  return getStore().emailDrafts.get(id);
 }
 
 export function getEmailDraftByLead(leadId: string): EmailDraft | undefined {
-  return Array.from(emailDrafts.values()).find((d) => d.leadId === leadId);
+  return Array.from(getStore().emailDrafts.values()).find((d) => d.leadId === leadId);
 }
 
 export function upsertEmailDraft(draft: EmailDraft): void {
-  emailDrafts.set(draft.id, draft);
+  getStore().emailDrafts.set(draft.id, draft);
   saveToDisk();
 }
 
 // --- Notifications ---
 
 export function getAllNotifications(): Notification[] {
-  return [...notifications].sort(
+  return [...getStore().notifications].sort(
     (a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 }
 
 export function getUnreadNotifications(): Notification[] {
-  return notifications.filter((n) => !n.read);
+  return getStore().notifications.filter((n) => !n.read);
 }
 
 export function addNotification(notification: Notification): void {
-  notifications.push(notification);
+  getStore().notifications.push(notification);
   saveToDisk();
 }
 
 export function markNotificationRead(id: string): void {
-  const n = notifications.find((n) => n.id === id);
+  const n = getStore().notifications.find((n) => n.id === id);
   if (n) {
     n.read = true;
     saveToDisk();
   }
 }
 
+export function markNotificationsReadByLeadAndType(
+  leadId: string,
+  type: Notification["type"]
+): void {
+  for (const n of getStore().notifications) {
+    if (n.leadId === leadId && n.type === type && !n.read) {
+      n.read = true;
+    }
+  }
+  saveToDisk();
+}
+
+export function getPendingReviewCount(): number {
+  return getStore().notifications.filter(
+    (n) => n.type === "hold_for_review" && !n.read
+  ).length;
+}
+
 export function markAllNotificationsRead(): void {
-  for (const n of notifications) {
+  for (const n of getStore().notifications) {
     n.read = true;
   }
   saveToDisk();
 }
 
+// --- Settings ---
+
+export function getSettings(): AppSettings {
+  return { ...getStore().settings };
+}
+
+export function updateSettings(updates: Partial<AppSettings>): AppSettings {
+  Object.assign(getStore().settings, updates);
+  saveToDisk();
+  return { ...getStore().settings };
+}
+
 // --- Clear All ---
 
 export function clearAllData(): void {
-  leads.clear();
-  emailDrafts.clear();
-  notifications.length = 0;
+  const store = getStore();
+  store.leads.clear();
+  store.emailDrafts.clear();
+  store.notifications.length = 0;
   saveToDisk();
 }
 
 // --- Stats ---
 
 export function getStats() {
-  const allLeads = Array.from(leads.values());
+  const allLeads = Array.from(getStore().leads.values());
   const statusCounts: Record<string, number> = {};
 
   for (const lead of allLeads) {
