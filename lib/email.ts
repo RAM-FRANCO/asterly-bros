@@ -97,13 +97,20 @@ export async function sendNotificationEmail(
   leadId: string,
   redirectEmail: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (!redirectEmail || !redirectEmail.includes("@")) {
+    return {
+      success: false,
+      error: "No valid redirect email configured. Set one in Settings.",
+    };
+  }
+
   const transporter = createTransporter();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   try {
     await transporter.sendMail({
       from: `"Asterley Outreach Bot" <${process.env.GMAIL_USER}>`,
-      to: redirectEmail || process.env.GMAIL_USER,
+      to: redirectEmail,
       subject: `[Review Needed] ${leadName} — held for your approval`,
       text: [
         `A lead has been held for your review.\n`,

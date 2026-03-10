@@ -18,25 +18,19 @@ import { toast } from "sonner";
 import type { EmailDraft } from "@/types/outreach";
 import type { Notification } from "@/types/pipeline";
 
-const STATUS_ORDER: EmailDraft["status"][] = [
+const QUEUE_STATUSES: EmailDraft["status"][] = [
   "pending_review",
   "approved",
-  "sent",
-  "draft",
-  "failed",
-  "bounced",
 ];
 
 function groupDraftsByStatus(drafts: EmailDraft[]) {
   const groups: Record<string, EmailDraft[]> = {};
-  for (const status of STATUS_ORDER) {
+  for (const status of QUEUE_STATUSES) {
     groups[status] = [];
   }
   for (const draft of drafts) {
     if (groups[draft.status]) {
       groups[draft.status].push(draft);
-    } else {
-      groups[draft.status] = [draft];
     }
   }
   return groups;
@@ -132,8 +126,11 @@ export default function OutreachPage() {
     [drafts]
   );
 
-  const groups = groupDraftsByStatus(drafts);
-  const hasDrafts = drafts.length > 0;
+  const queueDrafts = drafts.filter((d) =>
+    QUEUE_STATUSES.includes(d.status)
+  );
+  const groups = groupDraftsByStatus(queueDrafts);
+  const hasQueueItems = queueDrafts.length > 0;
 
   return (
     <article className="space-y-6">
@@ -148,9 +145,9 @@ export default function OutreachPage() {
         <div className="flex items-center justify-center py-12">
           <p className="text-muted-foreground">Loading drafts…</p>
         </div>
-      ) : !hasDrafts ? (
+      ) : !hasQueueItems ? (
         <section className="rounded-lg border border-dashed py-12 text-center">
-          <p className="text-muted-foreground">No email drafts yet</p>
+          <p className="text-muted-foreground">No drafts awaiting approval</p>
           <p className="text-sm text-muted-foreground mt-1">
             Generate drafts from the leads page to see them here
           </p>
@@ -162,8 +159,8 @@ export default function OutreachPage() {
         </section>
       ) : (
         <section className="space-y-8">
-          {STATUS_ORDER.filter(
-            (s) => groups[s]?.length > 0 && ["pending_review", "approved", "sent"].includes(s)
+          {QUEUE_STATUSES.filter(
+            (s) => groups[s]?.length > 0
           ).map((status) => (
             <div key={status}>
               <h2 className="text-lg font-medium capitalize mb-4">

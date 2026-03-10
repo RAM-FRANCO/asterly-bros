@@ -95,7 +95,9 @@ export function SendEmailModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Review & Send Email</DialogTitle>
+          <DialogTitle>
+            {isSent ? "Sent Email" : "Review & Send Email"}
+          </DialogTitle>
           <DialogDescription>
             To: {draft.intendedRecipient}
             {draft.redirectedTo && (

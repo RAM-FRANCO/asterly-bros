@@ -87,6 +87,7 @@ export async function POST(request: Request) {
     };
 
     let notification: Notification | null = null;
+    let notificationEmailError: string | undefined;
 
     if (needsReview) {
       notification = {
@@ -99,12 +100,21 @@ export async function POST(request: Request) {
         createdAt: new Date().toISOString(),
       };
 
-      sendNotificationEmail(
-        lead.name,
-        holdReasons,
-        lead.placeId,
-        pocRedirectEmail
-      ).catch(() => {});
+      if (pocRedirectEmail && pocRedirectEmail.includes("@")) {
+        const emailResult = await sendNotificationEmail(
+          lead.name,
+          holdReasons,
+          lead.placeId,
+          pocRedirectEmail
+        );
+        if (!emailResult.success) {
+          notificationEmailError = emailResult.error;
+          console.error("Failed to send review notification email:", emailResult.error);
+        }
+      } else {
+        notificationEmailError = "No valid redirect email configured in Settings";
+        console.warn("Skipping notification email: no valid pocRedirectEmail provided");
+      }
     }
 
     return NextResponse.json({
@@ -115,6 +125,8 @@ export async function POST(request: Request) {
       holdReasons,
       tier,
       tierLabel: getOutreachTierLabel(tier),
+      notificationEmailSent: needsReview && !notificationEmailError,
+      ...(notificationEmailError && { notificationEmailError }),
     });
   } catch (error) {
     const message =

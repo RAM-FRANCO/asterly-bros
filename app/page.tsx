@@ -139,9 +139,6 @@ export default function DashboardPage() {
               <Link href="/outreach">
                 <Button variant="outline">Review Outreach Queue</Button>
               </Link>
-              <Link href="/pipeline">
-                <Button variant="outline">View Pipeline</Button>
-              </Link>
             </div>
           </section>
 

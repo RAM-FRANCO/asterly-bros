@@ -15,6 +15,7 @@ import {
   getEmailDraftByLead,
   upsertEmailDraft,
   addNotification,
+  markNotificationsReadByLeadAndType,
   getSettings,
 } from "@/lib/local-store";
 import type { Lead } from "@/types/lead";
@@ -127,6 +128,12 @@ export default function LeadDetailPage({
         }
 
         toast.success("Email draft generated");
+
+        if (data.notificationEmailError) {
+          toast.warning(
+            `Review notification email failed: ${data.notificationEmailError}`
+          );
+        }
       } else {
         toast.error(data.error ?? "Failed to generate email");
       }
@@ -172,6 +179,8 @@ export default function LeadDetailPage({
     };
     upsertEmailDraft(updatedDraft);
     setEmailDraft(updatedDraft);
+
+    markNotificationsReadByLeadAndType(draft.leadId, "hold_for_review");
 
     if (lead) {
       const updatedLead = { ...lead, status: "emailed" as const };
@@ -305,6 +314,11 @@ export default function LeadDetailPage({
         {emailDraft && emailDraft.status !== "sent" && (
           <Button onClick={() => setEmailModalOpen(true)}>
             Review & Send Email
+          </Button>
+        )}
+        {emailDraft && emailDraft.status === "sent" && (
+          <Button variant="outline" onClick={() => setEmailModalOpen(true)}>
+            View Sent Email
           </Button>
         )}
       </div>

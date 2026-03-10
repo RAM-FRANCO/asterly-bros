@@ -162,9 +162,7 @@ export function markNotificationsReadByLeadAndType(
 }
 
 export function getPendingReviewCount(): number {
-  return readNotifications().filter(
-    (n) => n.type === "hold_for_review" && !n.read
-  ).length;
+  return getAllEmailDrafts().filter((d) => d.status === "pending_review").length;
 }
 
 export function markAllNotificationsRead(): void {
