@@ -30,7 +30,6 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
   const [limit, setLimit] = useState<string>("3");
   const [isLoading, setIsLoading] = useState(false);
   const [resultCount, setResultCount] = useState<number | null>(null);
-  const [progressText, setProgressText] = useState<string | null>(null);
 
   const activeArea = useCustom ? customArea.trim() : area;
 
@@ -55,7 +54,6 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
 
     setIsLoading(true);
     setResultCount(null);
-    setProgressText("Searching venues…");
 
     try {
       const res = await fetch("/api/leads/discover", {
@@ -82,48 +80,39 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
         const existingById = getLead(venue.placeId);
         const existingByName = findLeadByName(venue.name);
         if (!existingById && !existingByName) {
-          upsertLead(venue);
           newLeads.push(venue);
         }
       }
 
-      setResultCount(newLeads.length);
-      onDiscoveryComplete?.();
-
       if (newLeads.length === 0) {
+        setResultCount(0);
         toast.success(
           `Found ${venues.length} venues in ${activeArea}. No new leads.`
         );
         return;
       }
 
-      toast.success(
-        `Found ${venues.length} venues in ${activeArea}. ${newLeads.length} new leads added. Enriching…`
-      );
-
       let enriched = 0;
       for (const lead of newLeads) {
-        setProgressText(
-          `Enriching ${enriched + 1} of ${newLeads.length}: ${lead.name}…`
-        );
         try {
           const enrichedLead = await enrichLead(lead);
           upsertLead(enrichedLead);
           enriched++;
-          onDiscoveryComplete?.();
         } catch {
+          upsertLead(lead);
           toast.error(`Failed to enrich ${lead.name}`);
         }
       }
 
+      setResultCount(newLeads.length);
+      onDiscoveryComplete?.();
       toast.success(
-        `Done — ${enriched} of ${newLeads.length} leads enriched & scored`
+        `Done — ${newLeads.length} leads added, ${enriched} enriched & scored`
       );
     } catch {
       toast.error("Discovery failed");
     } finally {
       setIsLoading(false);
-      setProgressText(null);
     }
   }
 
@@ -252,10 +241,9 @@ export function DiscoveryForm({ onDiscoveryComplete }: DiscoveryFormProps) {
           </Button>
         </div>
 
-        {(progressText ?? (resultCount !== null)) && (
+        {resultCount !== null && (
           <p className="col-span-full self-center text-sm text-muted-foreground sm:self-end">
-            {progressText ??
-              `${resultCount} new lead${resultCount !== 1 ? "s" : ""} added`}
+            {resultCount} new lead{resultCount !== 1 ? "s" : ""} added
           </p>
         )}
       </div>
