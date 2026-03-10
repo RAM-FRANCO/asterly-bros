@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/leads", label: "Leads", icon: SearchIcon },
   { href: "/outreach", label: "Outreach", icon: MailIcon },
   { href: "/pipeline", label: "Pipeline", icon: KanbanIcon },
+  { href: "/logs", label: "Logs", icon: LogsIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -88,6 +89,14 @@ function KanbanIcon({ className }: { className?: string }) {
   return (
     <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 5v11" /><path d="M12 5v6" /><path d="M18 5v14" />
+    </svg>
+  );
+}
+
+function LogsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 12H3" /><path d="M16 6H3" /><path d="M12 18H3" /><path d="m16 12 5 3-5 3v-6Z" />
     </svg>
   );
 }

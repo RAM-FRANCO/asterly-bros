@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   getAllNotifications,
   getUnreadNotifications,
+  getPendingReviewCount,
   markNotificationRead,
   markAllNotificationsRead,
 } from "@/lib/store";
@@ -9,8 +10,9 @@ import {
 export async function GET() {
   const notifications = getAllNotifications();
   const unreadCount = getUnreadNotifications().length;
+  const pendingReviewCount = getPendingReviewCount();
 
-  return NextResponse.json({ notifications, unreadCount });
+  return NextResponse.json({ notifications, unreadCount, pendingReviewCount });
 }
 
 export async function PATCH(request: Request) {

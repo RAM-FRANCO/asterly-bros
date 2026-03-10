@@ -13,12 +13,13 @@ const NAV_ITEMS = [
   { href: "/leads", label: "Leads" },
   { href: "/outreach", label: "Outreach" },
   { href: "/pipeline", label: "Pipeline" },
+  { href: "/logs", label: "Logs" },
   { href: "/settings", label: "Settings" },
 ];
 
 export function Header() {
   const pathname = usePathname();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export function Header() {
       try {
         const res = await fetch("/api/notifications");
         const data = await res.json();
-        setUnreadCount(data.unreadCount ?? 0);
+        setPendingReviewCount(data.pendingReviewCount ?? 0);
       } catch {
         // silently fail
       }
@@ -78,9 +79,9 @@ export function Header() {
       <div className="flex-1" />
 
       <div className="flex items-center gap-2">
-        {unreadCount > 0 && (
+        {pendingReviewCount > 0 && (
           <Badge variant="destructive" className="text-xs">
-            {unreadCount} pending review
+            {pendingReviewCount} pending review
           </Badge>
         )}
         <span className="hidden text-sm text-muted-foreground sm:inline">
