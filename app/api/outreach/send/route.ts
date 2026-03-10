@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getEmailDraft, upsertEmailDraft, getLead, upsertLead, addNotification } from "@/lib/store";
+import { getEmailDraft, upsertEmailDraft, getLead, upsertLead, addNotification, markNotificationsReadByLeadAndType } from "@/lib/store";
 import { sendOutreachEmail } from "@/lib/email";
 import type { Notification } from "@/types/pipeline";
 
 export async function POST(request: Request) {
   try {
-    const { emailId, selectedSubjectIndex } = await request.json();
+    const { emailId, selectedSubjectIndex, fullBody } = await request.json();
 
     if (!emailId) {
       return NextResponse.json(
@@ -33,6 +33,10 @@ export async function POST(request: Request) {
       draft.selectedSubjectIndex = selectedSubjectIndex;
     }
 
+    if (typeof fullBody === "string" && fullBody.trim().length > 0) {
+      draft.fullBody = fullBody;
+    }
+
     const result = await sendOutreachEmail(draft);
 
     if (result.success) {
@@ -46,6 +50,8 @@ export async function POST(request: Request) {
         lead.status = "emailed";
         upsertLead(lead);
       }
+
+      markNotificationsReadByLeadAndType(draft.leadId, "hold_for_review");
 
       const notification: Notification = {
         id: `notif-${Date.now()}`,
