@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { getLead, upsertLead, upsertEmailDraft, addNotification, getEmailDraftByLead } from "@/lib/store";
+import { getLead, upsertLead, upsertEmailDraft, addNotification, getEmailDraftByLead, getSettings } from "@/lib/store";
 import { generateEmailDraft, sendNotificationEmail } from "@/lib/email";
-import { CONFIDENCE_THRESHOLDS } from "@/constants/scoring-weights";
+import { getOutreachTier, getOutreachTierLabel } from "@/constants/scoring-weights";
+import type { OutreachTier } from "@/constants/scoring-weights";
 import type { EmailDraft } from "@/types/outreach";
+import type { Lead } from "@/types/lead";
 import type { Notification } from "@/types/pipeline";
 
 export async function POST(request: Request) {
@@ -39,37 +41,59 @@ export async function POST(request: Request) {
       );
     }
 
-    const { subjectLines, hook, bridge, fullBody } =
-      await generateEmailDraft(lead);
+    const score = lead.score ?? 0;
+    const tier = getOutreachTier(score);
 
-    const holdReasons = getHoldReasons(lead);
-    const isAutoApproved = holdReasons.length === 0;
+    if (tier === "skip") {
+      return NextResponse.json(
+        {
+          error: `Score too low (${score}) — not recommended for outreach`,
+          tier,
+          tierLabel: getOutreachTierLabel(tier),
+        },
+        { status: 422 }
+      );
+    }
+
+    const { subjectLines, hook, bridge, fullBody } =
+      await generateEmailDraft(lead, tier);
+
+    const holdReasons = getHoldReasons(lead, tier);
+    const needsReview = tier !== "high" || holdReasons.length > 0;
+
+    const intendedRecipient =
+      lead.enrichment.contactEmail ?? `info@${lead.name.toLowerCase().replace(/\s+/g, "")}.com`;
+
+    const { pocMode } = getSettings();
+    const pocFooter = pocMode
+      ? `\n\n---\n[PoC Mode] Originally intended for: ${intendedRecipient}`
+      : "";
 
     const draft: EmailDraft = {
       id: `email-${leadId}-${Date.now()}`,
       leadId,
       leadName: lead.name,
-      intendedRecipient:
-        lead.enrichment.contactEmail ?? `info@${lead.name.toLowerCase().replace(/\s+/g, "")}.com`,
+      intendedRecipient,
       subjectLines,
       selectedSubjectIndex: 0,
       hook,
       bridge,
-      offer: "", // included in fullBody via template
+      offer: "",
       close: "",
-      fullBody,
-      status: isAutoApproved ? "approved" : "pending_review",
-      confidenceScore: lead.score ?? 0,
+      fullBody: fullBody + pocFooter,
+      status: needsReview ? "pending_review" : "approved",
+      confidenceScore: score,
       holdReasons,
+      outreachTier: tier,
       createdAt: new Date().toISOString(),
     };
 
     upsertEmailDraft(draft);
 
-    lead.status = isAutoApproved ? "email_approved" : "email_drafted";
+    lead.status = needsReview ? "email_drafted" : "email_approved";
     upsertLead(lead);
 
-    if (!isAutoApproved) {
+    if (needsReview) {
       const notification: Notification = {
         id: `notif-${Date.now()}`,
         type: "hold_for_review",
@@ -88,8 +112,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       draft,
-      autoApproved: isAutoApproved,
+      autoApproved: !needsReview,
       holdReasons,
+      tier,
+      tierLabel: getOutreachTierLabel(tier),
     });
   } catch (error) {
     const message =
@@ -98,13 +124,14 @@ export async function POST(request: Request) {
   }
 }
 
-function getHoldReasons(lead: import("@/types/lead").Lead): string[] {
+function getHoldReasons(lead: Lead, tier: OutreachTier): string[] {
+  if (tier === "high") return [];
+
   const reasons: string[] = [];
-  const score = lead.score ?? 0;
   const enrichment = lead.enrichment;
 
-  if (score < CONFIDENCE_THRESHOLDS.HIGH) {
-    reasons.push(`Lead score ${score} is below auto-approve threshold (${CONFIDENCE_THRESHOLDS.HIGH})`);
+  if (tier === "low") {
+    reasons.push(`Low score (${lead.score ?? 0}) — may not be a strong fit`);
   }
 
   if (!enrichment?.contactEmail) {

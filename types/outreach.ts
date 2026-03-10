@@ -13,6 +13,7 @@ export interface EmailDraft {
   status: EmailStatus;
   confidenceScore: number;
   holdReasons: string[];
+  outreachTier: "high" | "medium" | "low" | "skip";
   createdAt: string;
   sentAt?: string;
   redirectedTo?: string;

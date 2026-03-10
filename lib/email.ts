@@ -3,9 +3,7 @@ import type { EmailDraft } from "@/types/outreach";
 import type { Lead } from "@/types/lead";
 import { DEFAULT_BRAND_VOICE } from "@/constants/brand-voice";
 import { aiGenerateEmail } from "@/lib/ai";
-
-const POC_MODE = process.env.POC_MODE === "true";
-const POC_REDIRECT_EMAIL = process.env.POC_REDIRECT_EMAIL ?? "";
+import { getSettings } from "@/lib/store";
 
 const SMTP_TIMEOUT_MS = 15000;
 
@@ -22,30 +20,64 @@ function createTransporter() {
   });
 }
 
-export function getRedirectAddress(intendedEmail: string): string {
-  if (!POC_MODE) return intendedEmail;
+export function getPocConfig(): { pocMode: boolean; redirectEmail: string } {
+  const settings = getSettings();
+  return {
+    pocMode: settings.pocMode,
+    redirectEmail: settings.pocRedirectEmail,
+  };
+}
+
+export function getRedirectAddress(
+  intendedEmail: string,
+  redirectEmail: string
+): string {
+  if (!redirectEmail || !redirectEmail.includes("@")) {
+    throw new Error(
+      "PoC mode is active but no valid redirect email is configured. Set one in Settings before sending."
+    );
+  }
 
   const sanitized = intendedEmail
     .replace(/@/g, "-at-")
     .replace(/\./g, "-");
-  const [localPart] = POC_REDIRECT_EMAIL.split("@");
-  const domain = POC_REDIRECT_EMAIL.split("@")[1];
+  const [localPart, domain] = redirectEmail.split("@");
   return `${localPart}+${sanitized}@${domain}`;
 }
 
 export async function sendOutreachEmail(
   draft: EmailDraft
 ): Promise<{ success: boolean; redirectedTo?: string; error?: string }> {
-  const transporter = createTransporter();
-  const to = getRedirectAddress(draft.intendedRecipient);
+  const { pocMode, redirectEmail } = getPocConfig();
 
-  const subjectPrefix = POC_MODE ? "[PoC] " : "";
+  if (!pocMode) {
+    return {
+      success: false,
+      error: "PoC mode is disabled — sending to real venues is blocked in this prototype. Enable PoC mode in Settings.",
+    };
+  }
+
+  if (!redirectEmail || !redirectEmail.includes("@")) {
+    return {
+      success: false,
+      error: "No valid redirect email configured. Set one in Settings before sending.",
+    };
+  }
+
+  const transporter = createTransporter();
+  const to = getRedirectAddress(draft.intendedRecipient, redirectEmail);
+
+  const subjectPrefix = pocMode ? "[PoC] " : "";
   const subject =
     subjectPrefix + draft.subjectLines[draft.selectedSubjectIndex];
 
-  const footer = POC_MODE
-    ? `\n\n---\n[PoC Mode] This email was intended for: ${draft.intendedRecipient}\nRedirected to: ${to}`
-    : "";
+  const bodyAlreadyHasPocFooter = draft.fullBody.includes("[PoC Mode]");
+  const footer =
+    pocMode && !bodyAlreadyHasPocFooter
+      ? `\n\n---\n[PoC Mode] Originally intended for: ${draft.intendedRecipient}\nRedirected to: ${to}`
+      : pocMode && bodyAlreadyHasPocFooter
+        ? `\nRedirected to: ${to}`
+        : "";
 
   try {
     await transporter.sendMail({
@@ -55,7 +87,7 @@ export async function sendOutreachEmail(
       text: draft.fullBody + footer,
     });
 
-    return { success: true, redirectedTo: POC_MODE ? to : undefined };
+    return { success: true, redirectedTo: pocMode ? to : undefined };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return { success: false, error: message };
@@ -68,12 +100,13 @@ export async function sendNotificationEmail(
   leadId: string
 ): Promise<{ success: boolean; error?: string }> {
   const transporter = createTransporter();
+  const { redirectEmail } = getPocConfig();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   try {
     await transporter.sendMail({
       from: `"Asterley Outreach Bot" <${process.env.GMAIL_USER}>`,
-      to: POC_REDIRECT_EMAIL || process.env.GMAIL_USER,
+      to: redirectEmail || process.env.GMAIL_USER,
       subject: `[Review Needed] ${leadName} — held for your approval`,
       text: [
         `A lead has been held for your review.\n`,
@@ -90,12 +123,19 @@ export async function sendNotificationEmail(
   }
 }
 
-export async function generateEmailDraft(lead: Lead): Promise<{
+export async function generateEmailDraft(
+  lead: Lead,
+  tier: "high" | "medium" | "low" = "high"
+): Promise<{
   subjectLines: string[];
   hook: string;
   bridge: string;
   fullBody: string;
 }> {
+  if (tier === "low") {
+    return generateLightEmailDraft(lead);
+  }
+
   const voice = DEFAULT_BRAND_VOICE;
   const enrichment = lead.enrichment;
 
@@ -173,4 +213,44 @@ RULES:
       fullBody: `Hi there,\n\nI came across ${lead.name} and loved what you're doing.\n\nWe make award-winning botanical spirits — Vermouth, Amaro, and Aperitivo — right here in South London, and I think they'd be a brilliant fit for your cocktail menu.\n\n${voice.offerTemplate}\n\n${voice.closeTemplate}\n\nBest,\n${voice.signatureName}\n${voice.signatureTitle}`,
     };
   }
+}
+
+function generateLightEmailDraft(lead: Lead): {
+  subjectLines: string[];
+  hook: string;
+  bridge: string;
+  fullBody: string;
+} {
+  const voice = DEFAULT_BRAND_VOICE;
+  const contactName = lead.enrichment?.contactName ?? "there";
+  const venueType = lead.enrichment?.venueType?.replace(/_/g, " ") ?? "venue";
+
+  const hook = `I came across ${lead.name} and thought you might be interested in something new for your ${venueType}.`;
+  const bridge = `We're Asterley Bros — we make award-winning Vermouth, Amaro, and Aperitivo in South London.`;
+
+  const fullBody = [
+    `Hi ${contactName},`,
+    "",
+    hook,
+    "",
+    bridge,
+    "",
+    voice.offerTemplate,
+    "",
+    `Happy to send over a sample if you're curious — no strings attached.`,
+    "",
+    `Best,`,
+    voice.signatureName,
+    voice.signatureTitle,
+  ].join("\n");
+
+  return {
+    subjectLines: [
+      `Quick intro — ${voice.brandName}`,
+      `Craft spirits for ${lead.name}?`,
+    ],
+    hook,
+    bridge,
+    fullBody,
+  };
 }
