@@ -1,19 +1,97 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { DEFAULT_BRAND_VOICE } from "@/constants/brand-voice";
 import { toast } from "sonner";
 import type { BrandVoiceConfig } from "@/types/outreach";
+
+interface PocSettings {
+  pocMode: boolean;
+  pocRedirectEmail: string;
+}
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<BrandVoiceConfig>(() => ({
     ...DEFAULT_BRAND_VOICE,
   }));
+
+  const [poc, setPoc] = useState<PocSettings>({
+    pocMode: false,
+    pocRedirectEmail: "",
+  });
+  const [pocLoading, setPocLoading] = useState(true);
+  const [pocSaving, setPocSaving] = useState(false);
+
+  const fetchPocSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings");
+      if (res.ok) {
+        const data = await res.json();
+        setPoc({ pocMode: data.pocMode, pocRedirectEmail: data.pocRedirectEmail });
+      }
+    } catch {
+      // fall back to defaults
+    } finally {
+      setPocLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPocSettings();
+  }, [fetchPocSettings]);
+
+  const handlePocToggle = async (enabled: boolean) => {
+    if (enabled && !poc.pocRedirectEmail.trim()) {
+      toast.error("Set a redirect email before enabling PoC mode");
+      return;
+    }
+
+    setPocSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pocMode: enabled }),
+      });
+      if (!res.ok) throw new Error();
+      setPoc((prev) => ({ ...prev, pocMode: enabled }));
+      toast.success(enabled ? "PoC mode enabled — emails will be redirected" : "PoC mode disabled — emails go to real venues");
+    } catch {
+      toast.error("Failed to update PoC mode");
+    } finally {
+      setPocSaving(false);
+    }
+  };
+
+  const handlePocEmailSave = async () => {
+    const email = poc.pocRedirectEmail.trim();
+    if (!email || !email.includes("@")) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+
+    setPocSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pocRedirectEmail: email }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Redirect email updated");
+    } catch {
+      toast.error("Failed to save redirect email");
+    } finally {
+      setPocSaving(false);
+    }
+  };
 
   const handleSave = () => {
     toast.success("Settings saved");
@@ -29,13 +107,76 @@ export default function SettingsPage() {
   return (
     <article className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Brand Voice Settings
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">
-          Configure tone, personality, and templates for outreach emails
+          Configure outreach behavior and brand voice
         </p>
       </header>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>PoC Mode (Proof of Concept)</CardTitle>
+            {!pocLoading && (
+              <Badge variant={poc.pocMode ? "default" : "secondary"}>
+                {poc.pocMode ? "Active" : "Off"}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            When enabled, all outreach emails are redirected to your email
+            instead of being sent to real venues. Use this for testing and demos.
+          </p>
+
+          {pocLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="poc-toggle"
+                  checked={poc.pocMode}
+                  onCheckedChange={handlePocToggle}
+                  disabled={pocSaving}
+                  aria-label="Toggle PoC mode"
+                />
+                <Label htmlFor="poc-toggle" className="cursor-pointer">
+                  {poc.pocMode ? "Emails redirect to you" : "Emails go to real venues"}
+                </Label>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="poc-redirect-email">Redirect email</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="poc-redirect-email"
+                    type="email"
+                    placeholder="your@email.com"
+                    value={poc.pocRedirectEmail}
+                    onChange={(e) =>
+                      setPoc((prev) => ({ ...prev, pocRedirectEmail: e.target.value }))
+                    }
+                    disabled={pocSaving}
+                    className="max-w-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={handlePocEmailSave}
+                    disabled={pocSaving}
+                  >
+                    Save
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  All outreach emails will be sent here with a [PoC] prefix when PoC mode is active.
+                </p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
