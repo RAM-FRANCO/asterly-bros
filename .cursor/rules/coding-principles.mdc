@@ -27,30 +27,32 @@ alwaysApply: true
 ## Feature-Based Folder Structure
 
 ```
-src/
-├── app/
-│   ├── page.tsx                        # Dashboard
-│   ├── leads/
-│   │   ├── page.tsx                    # Discovery & lead list
-│   │   └── [placeId]/page.tsx          # Lead detail + enrichment
-│   ├── outreach/page.tsx               # Email drafts queue
-│   ├── pipeline/page.tsx               # Pipeline tracker
-│   ├── settings/page.tsx               # Brand voice config
-│   └── api/
-│       ├── leads/
-│       ├── outreach/
-│       └── pipeline/
-├── components/
-│   ├── ui/                             # shadcn/ui primitives
-│   └── features/
-│       ├── leads/                      # lead-card, lead-list, discovery-form, score-badge
-│       ├── outreach/                   # email-preview, email-editor, subject-line-picker
-│       ├── pipeline/                   # pipeline-table, status-column, follow-up-reminder
-│       └── settings/                   # brand-voice-editor
-├── lib/                                # API clients, services, utilities
-├── constants/                          # Typed constants (no magic strings)
-├── types/                              # Shared TypeScript interfaces
-└── hooks/                              # Shared custom hooks
+app/
+├── page.tsx                            # Dashboard
+├── leads/
+│   ├── page.tsx                        # Discovery & lead list
+│   └── [placeId]/page.tsx              # Lead detail + enrichment
+├── outreach/page.tsx                   # Email drafts queue
+├── pipeline/page.tsx                   # Pipeline tracker
+├── settings/page.tsx                   # Brand voice config
+└── api/
+    ├── leads/
+    ├── outreach/
+    ├── pipeline/
+    └── notifications/
+components/
+├── ui/                                 # shadcn/ui primitives
+├── layout/                             # sidebar, header
+└── features/
+    ├── leads/                          # lead-card, lead-list, discovery-form, score-badge
+    ├── outreach/                       # email-preview
+    ├── pipeline/
+    ├── settings/
+    └── notifications/                  # notification-badge, notification-panel
+lib/                                    # API clients, services, utilities
+constants/                              # Typed constants (no magic strings)
+types/                                  # Shared TypeScript interfaces
+data/                                   # Seed data (JSON)
 ```
 
 - Group components, hooks, and logic **by feature**, not by type.

@@ -1,65 +1,172 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PIPELINE_STAGES } from "@/constants/venue-types";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import type { PipelineEntry, PipelineStats } from "@/types/pipeline";
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<PipelineStats | null>(null);
+  const [recentLeads, setRecentLeads] = useState<PipelineEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/pipeline");
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setStats(data.stats ?? null);
+      const pipeline = data.pipeline ?? [];
+      setRecentLeads(
+        pipeline
+          .sort(
+            (a: PipelineEntry, b: PipelineEntry) =>
+              new Date(b.updatedAt).getTime() -
+              new Date(a.updatedAt).getTime()
+          )
+          .slice(0, 5)
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load dashboard");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const getStageColor = (status: LeadStatus) => {
+    const stage = PIPELINE_STAGES.find((s) => s.key === status);
+    return stage?.color ?? "bg-gray-100 text-gray-700";
+  };
+
+  const getStageLabel = (status: LeadStatus) => {
+    const stage = PIPELINE_STAGES.find((s) => s.key === status);
+    return stage?.label ?? status;
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <article className="space-y-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground mt-1">
+          AI-powered lead generation for Asterley Bros
+        </p>
+      </header>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <p className="text-muted-foreground">Loading…</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      ) : (
+        <>
+          {stats && (
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Leads
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{stats.total}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Average Score
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{stats.avgScore}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Needs Review
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Link href="/outreach" className="block">
+                    <p className="text-2xl font-bold text-primary hover:underline">
+                      {stats.needsReview}
+                    </p>
+                  </Link>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Conversion Rate
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{stats.conversionRate}%</p>
+                </CardContent>
+              </Card>
+            </section>
+          )}
+
+          <section>
+            <h2 className="text-lg font-medium mb-4">Quick Actions</h2>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/leads">
+                <Button variant="outline">Discover New Leads</Button>
+              </Link>
+              <Link href="/outreach">
+                <Button variant="outline">Review Outreach Queue</Button>
+              </Link>
+              <Link href="/pipeline">
+                <Button variant="outline">View Pipeline</Button>
+              </Link>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-medium mb-4">Recent Activity</h2>
+            {recentLeads.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                No recent leads. Discover leads to get started.
+              </p>
+            ) : (
+              <div className="rounded-lg border divide-y">
+                {recentLeads.map((lead) => (
+                  <div
+                    key={lead.leadId}
+                    className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap"
+                  >
+                    <span className="font-medium shrink-0">{lead.leadName}</span>
+                    <span className="text-muted-foreground text-sm">
+                      {lead.area}
+                    </span>
+                    <Badge
+                      className={cn(
+                        "shrink-0",
+                        getStageColor(lead.status)
+                      )}
+                    >
+                      {getStageLabel(lead.status)}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground ml-auto">
+                      Score: {lead.score}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </article>
   );
 }
